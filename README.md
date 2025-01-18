@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://taskfile.dev">
-    <img src="docs/static/img/logo.svg" width="200px" height="200px" />
+    <img src="website/static/img/logo.svg" width="200px" height="200px" />
   </a>
 
   <h1>Task</h1>
@@ -10,20 +10,18 @@
   </p>
 
   <p>
-    <a href="https://taskfile.dev/installation/">Installation</a> | <a href="https://taskfile.dev/usage/">Documentation</a> | <a href="https://twitter.com/taskfiledev">Twitter</a> | <a href="https://fosstodon.org/@task">Mastodon</a> | <a href="https://discord.gg/6TY36E39UK">Discord</a>
+    <a href="https://taskfile.dev/installation/">Installation</a> | <a href="https://taskfile.dev/usage/">Documentation</a> | <a href="https://twitter.com/taskfiledev">Twitter</a> | <a href="https://bsky.app/profile/taskfile.dev">Bluesky</a> | <a href="https://fosstodon.org/@task">Mastodon</a> | <a href="https://discord.gg/6TY36E39UK">Discord</a>
   </p>
+
+  <h1>Gold Sponsors</h1>
+
+  <table>
+    <tr>
+      <td align="center" valign="middle">
+        <a target="_blank" href="https://devowl.io">
+          <img src="/website/static/img/devowl.io.svg" height="100px" title="devowl.io" />
+        </a>
+      </td>
+    </tr>
+  </table>
 </div>
-
-## Gold Sponsors
-
-<div align="center">
-
-| [Appwrite][appwrite]                                   |
-| ------------------------------------------------------ |
-| [![Appwrite](/docs/static/img/appwrite.svg)][appwrite] |
-
-</div>
-
-<!-- prettier-ignore-start -->
-[appwrite]: https://appwrite.io/?utm_source=task_github&utm_medium=social&utm_campaign=task_oss_fund
-<!-- prettier-ignore-end -->

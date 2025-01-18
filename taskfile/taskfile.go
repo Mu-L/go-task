@@ -1,89 +1,161 @@
 package taskfile
 
 import (
-	"fmt"
+	"context"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
-	"gopkg.in/yaml.v3"
-
 	"github.com/go-task/task/v3/errors"
+	"github.com/go-task/task/v3/internal/filepathext"
+	"github.com/go-task/task/v3/internal/logger"
+	"github.com/go-task/task/v3/internal/sysinfo"
 )
 
 var (
-	V3 = semver.MustParse("3")
-	V2 = semver.MustParse("2")
+	defaultTaskfiles = []string{
+		"Taskfile.yml",
+		"taskfile.yml",
+		"Taskfile.yaml",
+		"taskfile.yaml",
+		"Taskfile.dist.yml",
+		"taskfile.dist.yml",
+		"Taskfile.dist.yaml",
+		"taskfile.dist.yaml",
+	}
+	allowedContentTypes = []string{
+		"text/plain",
+		"text/yaml",
+		"text/x-yaml",
+		"application/yaml",
+		"application/x-yaml",
+	}
 )
 
-// Taskfile represents a Taskfile.yml
-type Taskfile struct {
-	Location   string
-	Version    *semver.Version
-	Expansions int
-	Output     Output
-	Method     string
-	Includes   *IncludedTaskfiles
-	Set        []string
-	Shopt      []string
-	Vars       *Vars
-	Env        *Vars
-	Tasks      Tasks
-	Silent     bool
-	Dotenv     []string
-	Run        string
-	Interval   time.Duration
-}
-
-func (tf *Taskfile) UnmarshalYAML(node *yaml.Node) error {
-	switch node.Kind {
-	case yaml.MappingNode:
-		var taskfile struct {
-			Version    *semver.Version
-			Expansions int
-			Output     Output
-			Method     string
-			Includes   *IncludedTaskfiles
-			Set        []string
-			Shopt      []string
-			Vars       *Vars
-			Env        *Vars
-			Tasks      Tasks
-			Silent     bool
-			Dotenv     []string
-			Run        string
-			Interval   time.Duration
-		}
-		if err := node.Decode(&taskfile); err != nil {
-			return err
-		}
-		tf.Version = taskfile.Version
-		tf.Expansions = taskfile.Expansions
-		tf.Output = taskfile.Output
-		tf.Method = taskfile.Method
-		tf.Includes = taskfile.Includes
-		tf.Set = taskfile.Set
-		tf.Shopt = taskfile.Shopt
-		tf.Vars = taskfile.Vars
-		tf.Env = taskfile.Env
-		tf.Tasks = taskfile.Tasks
-		tf.Silent = taskfile.Silent
-		tf.Dotenv = taskfile.Dotenv
-		tf.Run = taskfile.Run
-		tf.Interval = taskfile.Interval
-		if tf.Expansions <= 0 {
-			tf.Expansions = 2
-		}
-		if tf.Version == nil {
-			return errors.New("task: 'version' is required")
-		}
-		if tf.Vars == nil {
-			tf.Vars = &Vars{}
-		}
-		if tf.Env == nil {
-			tf.Env = &Vars{}
-		}
-		return nil
+// RemoteExists will check if a file at the given URL Exists. If it does, it
+// will return its URL. If it does not, it will search the search for any files
+// at the given URL with any of the default Taskfile files names. If any of
+// these match a file, the first matching path will be returned. If no files are
+// found, an error will be returned.
+func RemoteExists(ctx context.Context, l *logger.Logger, u *url.URL, timeout time.Duration) (*url.URL, error) {
+	// Create a new HEAD request for the given URL to check if the resource exists
+	req, err := http.NewRequestWithContext(ctx, "HEAD", u.String(), nil)
+	if err != nil {
+		return nil, errors.TaskfileFetchFailedError{URI: u.String()}
 	}
 
-	return fmt.Errorf("yaml: line %d: cannot unmarshal %s into taskfile", node.Line, node.ShortTag())
+	// Request the given URL
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, &errors.TaskfileNetworkTimeoutError{URI: u.String(), Timeout: timeout}
+		}
+		return nil, errors.TaskfileFetchFailedError{URI: u.String()}
+	}
+	defer resp.Body.Close()
+
+	// If the request was successful and the content type is allowed, return the
+	// URL The content type check is to avoid downloading files that are not
+	// Taskfiles It means we can try other files instead of downloading
+	// something that is definitely not a Taskfile
+	contentType := resp.Header.Get("Content-Type")
+	if resp.StatusCode == http.StatusOK && slices.ContainsFunc(allowedContentTypes, func(s string) bool {
+		return strings.Contains(contentType, s)
+	}) {
+		return u, nil
+	}
+
+	// If the request was not successful, append the default Taskfile names to
+	// the URL and return the URL of the first successful request
+	for _, taskfile := range defaultTaskfiles {
+		// Fixes a bug with JoinPath where a leading slash is not added to the
+		// path if it is empty
+		if u.Path == "" {
+			u.Path = "/"
+		}
+		alt := u.JoinPath(taskfile)
+		req.URL = alt
+
+		// Try the alternative URL
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, errors.TaskfileFetchFailedError{URI: u.String()}
+		}
+		defer resp.Body.Close()
+
+		// If the request was successful, return the URL
+		if resp.StatusCode == http.StatusOK {
+			l.VerboseOutf(logger.Magenta, "task: [%s] Not found - Using alternative (%s)\n", alt.String(), taskfile)
+			return alt, nil
+		}
+	}
+
+	return nil, errors.TaskfileNotFoundError{URI: u.String(), Walk: false}
+}
+
+// Exists will check if a file at the given path Exists. If it does, it will
+// return the path to it. If it does not, it will search for any files at the
+// given path with any of the default Taskfile files names. If any of these
+// match a file, the first matching path will be returned. If no files are
+// found, an error will be returned.
+func Exists(l *logger.Logger, path string) (string, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if fi.Mode().IsRegular() ||
+		fi.Mode()&os.ModeDevice != 0 ||
+		fi.Mode()&os.ModeSymlink != 0 ||
+		fi.Mode()&os.ModeNamedPipe != 0 {
+		return filepath.Abs(path)
+	}
+
+	for _, taskfile := range defaultTaskfiles {
+		alt := filepathext.SmartJoin(path, taskfile)
+		if _, err := os.Stat(alt); err == nil {
+			l.VerboseOutf(logger.Magenta, "task: [%s] Not found - Using alternative (%s)\n", path, taskfile)
+			return filepath.Abs(alt)
+		}
+	}
+
+	return "", errors.TaskfileNotFoundError{URI: path, Walk: false}
+}
+
+// ExistsWalk will check if a file at the given path exists by calling the
+// exists function. If a file is not found, it will walk up the directory tree
+// calling the exists function until it finds a file or reaches the root
+// directory. On supported operating systems, it will also check if the user ID
+// of the directory changes and abort if it does.
+func ExistsWalk(l *logger.Logger, path string) (string, error) {
+	origPath := path
+	owner, err := sysinfo.Owner(path)
+	if err != nil {
+		return "", err
+	}
+	for {
+		fpath, err := Exists(l, path)
+		if err == nil {
+			return fpath, nil
+		}
+
+		// Get the parent path/user id
+		parentPath := filepath.Dir(path)
+		parentOwner, err := sysinfo.Owner(parentPath)
+		if err != nil {
+			return "", err
+		}
+
+		// Error if we reached the root directory and still haven't found a file
+		// OR if the user id of the directory changes
+		if path == parentPath || (parentOwner != owner) {
+			return "", errors.TaskfileNotFoundError{URI: origPath, Walk: false}
+		}
+
+		owner = parentOwner
+		path = parentPath
+	}
 }

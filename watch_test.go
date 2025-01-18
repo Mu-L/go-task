@@ -6,16 +6,18 @@ package task_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/go-task/task/v3"
 	"github.com/go-task/task/v3/internal/filepathext"
-	"github.com/go-task/task/v3/taskfile"
+	"github.com/go-task/task/v3/taskfile/ast"
 )
 
 func TestFileWatcherInterval(t *testing.T) {
@@ -56,7 +58,7 @@ Hello, World!
 			case <-ctx.Done():
 				return
 			default:
-				err := e.Run(ctx, taskfile.Call{Task: "default"})
+				err := e.Run(ctx, &ast.Call{Task: "default"})
 				if err != nil {
 					return
 				}
@@ -77,4 +79,22 @@ Hello, World!
 	require.NoError(t, err)
 	err = os.RemoveAll(filepathext.SmartJoin(dir, "src"))
 	require.NoError(t, err)
+}
+
+func TestShouldIgnoreFile(t *testing.T) {
+	tt := []struct {
+		path   string
+		expect bool
+	}{
+		{"/.git/hooks", true},
+		{"/.github/workflows/build.yaml", false},
+	}
+
+	for k, ct := range tt {
+		ct := ct
+		t.Run(fmt.Sprintf("ignore - %d", k), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, task.ShouldIgnoreFile(ct.path), ct.expect)
+		})
+	}
 }

@@ -65,18 +65,31 @@ func (err *TaskInternalError) Code() int {
 	return CodeTaskInternal
 }
 
-// TaskNameConflictError is returned when multiple tasks with the same name or
+// TaskNameConflictError is returned when multiple tasks with a matching name or
 // alias are found.
 type TaskNameConflictError struct {
-	AliasName string
+	Call      string
 	TaskNames []string
 }
 
 func (err *TaskNameConflictError) Error() string {
-	return fmt.Sprintf(`task: Multiple tasks (%s) with alias %q found`, strings.Join(err.TaskNames, ", "), err.AliasName)
+	return fmt.Sprintf(`task: Found multiple tasks (%s) that match %q`, strings.Join(err.TaskNames, ", "), err.Call)
 }
 
 func (err *TaskNameConflictError) Code() int {
+	return CodeTaskNameConflict
+}
+
+type TaskNameFlattenConflictError struct {
+	TaskName string
+	Include  string
+}
+
+func (err *TaskNameFlattenConflictError) Error() string {
+	return fmt.Sprintf(`task: Found multiple tasks (%s) included by "%s""`, err.TaskName, err.Include)
+}
+
+func (err *TaskNameFlattenConflictError) Code() int {
 	return CodeTaskNameConflict
 }
 
@@ -105,10 +118,7 @@ type TaskCancelledByUserError struct {
 }
 
 func (err *TaskCancelledByUserError) Error() string {
-	return fmt.Sprintf(
-		`task: Task "%q" cancelled by user`,
-		err.TaskName,
-	)
+	return fmt.Sprintf(`task: Task %q cancelled by user`, err.TaskName)
 }
 
 func (err *TaskCancelledByUserError) Code() int {
@@ -122,11 +132,55 @@ type TaskCancelledNoTerminalError struct {
 
 func (err *TaskCancelledNoTerminalError) Error() string {
 	return fmt.Sprintf(
-		`task: Task "%q" cancelled because it has a prompt and the environment is not a terminal. Use --yes (-y) to run anyway.`,
+		`task: Task %q cancelled because it has a prompt and the environment is not a terminal. Use --yes (-y) to run anyway.`,
 		err.TaskName,
 	)
 }
 
 func (err *TaskCancelledNoTerminalError) Code() int {
 	return CodeTaskCancelled
+}
+
+// TaskMissingRequiredVars is returned when a task is missing required variables.
+type TaskMissingRequiredVars struct {
+	TaskName    string
+	MissingVars []string
+}
+
+func (err *TaskMissingRequiredVars) Error() string {
+	return fmt.Sprintf(
+		`task: Task %q cancelled because it is missing required variables: %s`,
+		err.TaskName,
+		strings.Join(err.MissingVars, ", "),
+	)
+}
+
+func (err *TaskMissingRequiredVars) Code() int {
+	return CodeTaskMissingRequiredVars
+}
+
+type NotAllowedVar struct {
+	Value string
+	Enum  []string
+	Name  string
+}
+
+type TaskNotAllowedVars struct {
+	TaskName       string
+	NotAllowedVars []NotAllowedVar
+}
+
+func (err *TaskNotAllowedVars) Error() string {
+	var builder strings.Builder
+
+	builder.WriteString(fmt.Sprintf("task: Task %q cancelled because it is missing required variables:\n", err.TaskName))
+	for _, s := range err.NotAllowedVars {
+		builder.WriteString(fmt.Sprintf("  - %s has an invalid value : '%s' (allowed values : %v)\n", s.Name, s.Value, s.Enum))
+	}
+
+	return builder.String()
+}
+
+func (err *TaskNotAllowedVars) Code() int {
+	return CodeTaskNotAllowedVars
 }

@@ -1,6 +1,384 @@
 # Changelog
 
-## Unreleased
+## v3.41.0 - 2025-01-18
+
+- Fixed an issue where dynamic variables were not properly logged in verbose
+  mode (#1920, #1921 by @mgbowman).
+- Support `silent` for defer statements (#1877, #1879 by @danilobuerger).
+- Added an option to exclude some tasks from being included (#1859 by
+  @vmaerten).
+- Fixed an issue where a required variable was incorrectly handled in a template
+  function (#1950, #1962 by @vmaerten).
+- Expose a new `TASK_DIR` special variable, which will contain the absolute path
+  of task directory. (#1959, #1961 by @vmaerten).
+- Fixed fatal bugs that caused concurrent map writes (#1605, #1972, #1974 by
+  @pd93, @GrahamDennis and @trim21).
+- Refactored internal ordered map implementation to use
+  [github.com/elliotchance/orderedmap](https://github.com/elliotchance/orderedmap)
+  (#1797 by @pd93).
+- Fixed a bug where variables defined at the task level were being ignored in
+  the `requires` section. (#1960, #1955, #1768 by @vmaerten and @mokeko)
+- The `CHECKSUM` and `TIMESTAMP` variables are now accessible within `cmds`
+  (#1872 by @niklasr22).
+- Updated [installation docs](https://taskfile.dev/installation) and added pip
+  installation method (#935, #1989 by @pd93).
+- Fixed a bug where dynamic variables could not access environment variables
+  (#630, #1869 by @rohm1 and @pd93).
+- Disable version check for use as an external library (#1938 by @leaanthony).
+
+## v3.40.1 - 2024-12-06
+
+- Fixed a security issue in `git-urls` by switching to the maintained fork
+  `chainguard-dev/git-urls` (#1917 by @AlekSi).
+- Added missing `platforms` property to `cmds` that use `for` (#1915 by
+  @dkarter).
+- Added misspell linter to check for misspelled English words (#1883 by
+  @christiandins).
+
+## v3.40.0 - 2024-11-05
+
+- Fixed output of some functions (e.g. `splitArgs`/`splitLines`) not working in
+  for loops (#1822, #1823 by @stawii).
+- Added a new `TASK_OFFLINE` environment variable to configure the `--offline`
+  flag and expose it as a special variable in the templating system (#1470,
+  #1716 by @vmaerten and @pd93).
+- Fixed a bug where multiple remote includes caused all prompts to display
+  without waiting for user input (#1832, #1833 by @vmaerten and @pd93).
+- When using the
+  "[Remote Taskfiles](https://taskfile.dev/experiments/remote-taskfiles/)".
+  experiment, you can now include Taskfiles from Git repositories (#1652 by
+  @vmaerten).
+- Improved the error message when a dotenv file cannot be parsed (#1842 by
+  @pbitty).
+- Fix issue with directory when using the remote experiment (#1757 by @pbitty).
+- Fixed an issue where a special variable was used in combination with a dotenv
+  file (#1232, #1810 by @vmaerten).
+- Refactor the way Task reads Taskfiles to improve readability (#1771 by
+  @pbitty).
+- Added a new option to ensure variable is within the list of values (#1827 by
+  @vmaerten).
+- Allow multiple prompts to be specified for a task (#1861, #1866 by @mfbmina).
+- Added new template function: `numCPU`, which returns the number of logical
+  CPUs usable (#1890, #1887 by @Amoghrd).
+- Fixed a bug where non-nil, empty dynamic variables are returned as an empty
+  interface (#1903, #1904 by @pd93).
+
+## v3.39.2 - 2024-09-19
+
+- Fix dynamic variables not working properly for a defer: statement (#1803,
+  #1818 by @vmaerten).
+
+## v3.39.1 - 2024-09-18
+
+- Added Renovate configuration to automatically create PRs to keep dependencies
+  up to date (#1783 by @vmaerten).
+- Fixed a bug where the help was displayed twice (#1805, #1806 by @vmaerten).
+- Fixed a bug where ZSH and PowerShell completions did not work when using the
+  recommended method. (#1813, #1809 by @vmaerten and @shirayu)
+- Fix variables not working properly for a `defer:` statement (#1803, #1814 by
+  @vmaerten and @andreynering).
+
+## v3.39.0 - 2024-09-07
+
+- Added
+  [Env Precedence Experiment](https://taskfile.dev/experiments/env-precedence)
+  (#1038, #1633 by @vmaerten).
+- Added a CI lint job to ensure that the docs are updated correctly (#1719 by
+  @vmaerten).
+- Updated minimum required Go version to 1.22 (#1758 by @pd93).
+- Expose a new `EXIT_CODE` special variable on `defer:` when a command finishes
+  with a non-zero exit code (#1484, #1762 by @dorimon-1 and @andreynering).
+- Expose a new `ALIAS` special variable, which will contain the alias used to
+  call the current task. Falls back to the task name. (#1764 by @DanStory).
+- Fixed `TASK_REMOTE_DIR` environment variable not working when the path was
+  absolute. (#1715 by @vmaerten).
+- Added an option to declare an included Taskfile as flattened (#1704 by
+  @vmaerten).
+- Added a new
+  [`--completion` flag](https://taskfile.dev/installation/#setup-completions) to
+  output completion scripts for various shells (#293, #1157 by @pd93).
+  - This is now the preferred way to install completions.
+  - The completion scripts in the `completion` directory
+    [are now deprecated](https://taskfile.dev/deprecations/completion-scripts/).
+- Added the ability to
+  [loop over a matrix of values](https://taskfile.dev/usage/#looping-over-a-matrix)
+  (#1766, #1767, #1784 by @pd93).
+- Fixed a bug in fish completion where aliases were not displayed (#1781, #1782
+  by @vmaerten).
+- Fixed panic when having a flattened included Taskfile that contains a
+  `default` task (#1777, #1778 by @vmaerten).
+- Optimized file existence checks for remote Taskfiles (#1713 by @vmaerten).
+
+## v3.38.0 - 2024-06-30
+
+- Added `TASK_EXE` special variable (#1616, #1624 by @pd93 and @andreynering).
+- Some YAML parsing errors will now show in a more user friendly way (#1619 by
+  @pd93).
+- Prefixed outputs will now be colorized by default (#1572 by
+  @AlexanderArvidsson)
+- [References](https://taskfile.dev/usage/#referencing-other-variables) are now
+  generally available (no experiments required) (#1654 by @pd93).
+- Templating functions can now be used in references (#1645, #1654 by @pd93).
+- Added a new
+  [templating reference page](https://taskfile.dev/reference/templating/) to the
+  documentation (#1614, #1653 by @pd93).
+- If using the
+  [Map Variables experiment (1)](https://taskfile.dev/experiments/map-variables/?proposal=1),
+  references are available by
+  [prefixing a string with a `#`](https://taskfile.dev/experiments/map-variables/?proposal=1#references)
+  (#1654 by @pd93).
+- If using the
+  [Map Variables experiment (2)](https://taskfile.dev/experiments/map-variables/?proposal=2),
+  the `yaml` and `json` keys are no longer available (#1654 by @pd93).
+- Added a new `TASK_REMOTE_DIR` environment variable to configure where cached
+  remote Taskfiles are stored (#1661 by @vmaerten).
+- Added a new `--clear-cache` flag to clear the cache of remote Taskfiles (#1639
+  by @vmaerten).
+- Improved the readability of cached remote Taskfile filenames (#1636 by
+  @vmaerten).
+- Starting releasing a binary for the `riscv64` architecture on Linux (#1699 by
+  @mengzhuo).
+- Added `CLI_SILENT` and `CLI_VERBOSE` variables (#1480, #1669 by @Vince-Smith).
+- Fixed a couple of bugs with the `prompt:` feature (#1657 by @pd93).
+- Fixed JSON Schema to disallow invalid properties (#1657 by @pd93).
+- Fixed version checks not working as intended (#872, #1663 by @vmaerten).
+- Fixed a bug where included tasks were run multiple times even if `run: once`
+  was set (#852, #1655 by @pd93).
+- Fixed some bugs related to column formatting in the terminal (#1350, #1637,
+  #1656 by @vmaerten).
+
+## v3.37.2 - 2024-05-12
+
+- Fixed a bug where an empty Taskfile would cause a panic (#1648 by @pd93).
+- Fixed a bug where includes Taskfile variable were not being merged correctly
+  (#1643, #1649 by @pd93).
+
+## v3.37.1 - 2024-05-09
+
+- Fix bug where non-string values (numbers, bools) added to `env:` weren't been
+  correctly exported (#1640, #1641 by @vmaerten and @andreynering).
+
+## v3.37.0 - 2024-05-08
+
+- Released the
+  [Any Variables experiment](https://taskfile.dev/blog/any-variables), but
+  [_without support for maps_](https://github.com/go-task/task/issues/1415#issuecomment-2044756925)
+  (#1415, #1547 by @pd93).
+- Refactored how Task reads, parses and merges Taskfiles using a DAG (#1563,
+  #1607 by @pd93).
+- Fix a bug which stopped tasks from using `stdin` as input (#1593, #1623 by
+  @pd93).
+- Fix error when a file or directory in the project contained a special char
+  like `&`, `(` or `)` (#1551, #1584 by @andreynering).
+- Added alias `q` for template function `shellQuote` (#1601, #1603 by @vergenzt)
+- Added support for `~` on ZSH completions (#1613 by @jwater7).
+- Added the ability to pass variables by reference using Go template syntax when
+  the
+  [Map Variables experiment](https://taskfile.dev/experiments/map-variables/) is
+  enabled (#1612 by @pd93).
+- Added support for environment variables in the templating engine in `includes`
+  (#1610 by @vmaerten).
+
+## v3.36.0 - 2024-04-08
+
+- Added support for
+  [looping over dependencies](https://taskfile.dev/usage/#looping-over-dependencies)
+  (#1299, #1541 by @pd93).
+- When using the
+  "[Remote Taskfiles](https://taskfile.dev/experiments/remote-taskfiles/)"
+  experiment, you are now able to use
+  [remote Taskfiles as your entrypoint](https://taskfile.dev/experiments/remote-taskfiles/#root-remote-taskfiles).
+  - `includes` in remote Taskfiles will now also resolve correctly (#1347 by
+    @pd93).
+- When using the
+  "[Any Variables](https://taskfile.dev/experiments/any-variables/)"
+  experiments, templating is now supported in collection-type variables (#1477,
+  #1511, #1526 by @pd93).
+- Fixed a bug where variables being passed to an included Taskfile were not
+  available when defining global variables (#1503, #1533 by @pd93).
+- Improved support to customized colors by allowing 8-bit colors and multiple
+  ANSI attributes (#1576 by @pd93).
+
+## v3.35.1 - 2024-03-04
+
+- Fixed a bug where the `TASKFILE_DIR` variable was sometimes incorrect (#1522,
+  #1523 by @pd93).
+- Added a new `TASKFILE` special variable that holds the root Taskfile path
+  (#1523 by @pd93).
+- Fixed various issues related to running a Taskfile from a subdirectory (#1529,
+  #1530 by @pd93).
+
+## v3.35.0 - 2024-02-28
+
+- Added support for
+  [wildcards in task names](https://taskfile.dev/usage/#wildcard-arguments)
+  (#836, #1489 by @pd93).
+- Added the ability to
+  [run Taskfiles via stdin](https://taskfile.dev/usage/#reading-a-taskfile-from-stdin)
+  (#655, #1483 by @pd93).
+- Bumped minimum Go version to 1.21 (#1500 by @pd93).
+- Fixed bug related to the `--list` flag (#1509, #1512 by @pd93, #1514, #1520 by
+  @pd93).
+- Add mention on the documentation to the fact that the variable declaration
+  order is respected (#1510 by @kirkrodrigues).
+- Improved style guide docs (#1495 by @iwittkau).
+- Removed duplicated entry for `requires` on the API docs (#1491 by
+  @teatimeguest).
+
+## v3.34.1 - 2024-01-27
+
+- Fixed prompt regression on
+  [Remote Taskfiles experiment](https://taskfile.dev/experiments/remote-taskfiles/)
+  (#1486, #1487 by @pd93).
+
+## v3.34.0 - 2024-01-25
+
+- Removed support for `version: 2` schemas. See the
+  [deprecation notice on our website](https://taskfile.dev/deprecations/version-2-schema)
+  (#1197, #1447 by @pd93).
+- Fixed a couple of issues in the JSON Schema + added a CI step to ensure it's
+  correct (#1471, #1474, #1476 by @sirosen).
+- Added
+  [Any Variables experiment proposal 2](https://taskfile.dev/experiments/any-variables/?proposal=2)
+  (#1415, #1444 by @pd93).
+- Updated the experiments and deprecations documentation format (#1445 by
+  @pd93).
+- Added new template function: `spew`, which can be used to print variables for
+  debugging purposes (#1452 by @pd93).
+- Added new template function: `merge`, which can be used to merge any number of
+  map variables (#1438, #1464 by @pd93).
+- Small change on the API when using as a library: `call.Direct` became
+  `call.Indirect` (#1459 by @pd93).
+- Refactored the public `read` and `taskfile` packages and introduced
+  `taskfile/ast` (#1450 by @pd93).
+- `ast.IncludedTaskfiles` renamed to `ast.Includes` and `orderedmap` package
+  renamed to `omap` plus some internal refactor work (#1456 by @pd93).
+- Fix zsh completion script to allow lowercase `taskfile` file names (#1482 by
+  @xontab).
+- Improvements on how we check the Taskfile version (#1465 by @pd93).
+- Added a new `ROOT_TASKFILE` special variable (#1468, #1469 by @pd93).
+- Fix experiment flags in `.env` when the `--dir` or `--taskfile` flags were
+  used (#1478 by @pd93).
+
+## v3.33.1 - 2023-12-21
+
+- Added support for looping over map variables with the
+  [Any Variables experiment](https://taskfile.dev/experiments/any-variables)
+  enabled (#1435, #1437 by @pd93).
+- Fixed a bug where dynamic variables were causing errors during fast
+  compilation (#1435, #1437 by @pd93)
+
+## v3.33.0 - 2023-12-20
+
+- Added
+  [Any Variables experiment](https://taskfile.dev/experiments/any-variables)
+  (#1415, #1421 by @pd93).
+- Updated Docusaurus to v3 (#1432 by @pd93).
+- Added `aliases` to `--json` flag output (#1430, #1431 by @pd93).
+- Added new `CLI_FORCE` special variable containing whether the `--force` or
+  `--force-all` flags were set (#1412, #1434 by @pd93).
+
+## v3.32.0 - 2023-11-29
+
+- Added ability to exclude some files from `sources:` by using `exclude:` (#225,
+  #1324 by @pd93 and @andreynering).
+- The
+  [Remote Taskfiles experiment](https://taskfile.dev/experiments/remote-taskfiles)
+  now prefers remote files over cached ones by default (#1317, #1345 by @pd93).
+- Added `--timeout` flag to the
+  [Remote Taskfiles experiment](https://taskfile.dev/experiments/remote-taskfiles)
+  (#1317, #1345 by @pd93).
+- Fix bug where dynamic `vars:` and `env:` were being executed when they should
+  actually be skipped by `platforms:` (#1273, #1377 by @andreynering).
+- Fix `schema.json` to make `silent` valid in `cmds` that use `for` (#1385,
+  #1386 by @iainvm).
+- Add new `--no-status` flag to skip expensive status checks when running
+  `task --list --json` (#1348, #1368 by @amancevice).
+
+## v3.31.0 - 2023-10-07
+
+- Enabled the `--yes` flag for the
+  [Remote Taskfiles experiment](https://taskfile.dev/experiments/remote-taskfiles)
+  (#1317, #1344 by @pd93).
+- Add ability to set `watch: true` in a task to automatically run it in watch
+  mode (#231, #1361 by @andreynering).
+- Fixed a bug on the watch mode where paths that contained `.git` (like
+  `.github`), for example, were also being ignored (#1356 by @butuzov).
+- Fixed a nil pointer error when running a Taskfile with no contents (#1341,
+  #1342 by @pd93).
+- Added a new [exit code](https://taskfile.dev/api/#exit-codes) (107) for when a
+  Taskfile does not contain a schema version (#1342 by @pd93).
+- Increased limit of maximum task calls from 100 to 1000 for now, as some people
+  have been reaching this limit organically now that we have loops. This check
+  exists to detect recursive calls, but will be removed in favor of a better
+  algorithm soon (#1321, #1332).
+- Fixed templating on descriptions on `task --list` (#1343 by @blackjid).
+- Fixed a bug where precondition errors were incorrectly being printed when task
+  execution was aborted (#1337, #1338 by @sylv-io).
+
+## v3.30.1 - 2023-09-14
+
+- Fixed a regression where some special variables weren't being set correctly
+  (#1331, #1334 by @pd93).
+
+## v3.30.0 - 2023-09-13
+
+- Prep work for Remote Taskfiles (#1316 by @pd93).
+- Added the
+  [Remote Taskfiles experiment](https://taskfile.dev/experiments/remote-taskfiles)
+  as a draft (#1152, #1317 by @pd93).
+- Improve performance of content checksumming on `sources:` by replacing md5
+  with [XXH3](https://xxhash.com/) which is much faster. This is a soft breaking
+  change because checksums will be invalidated when upgrading to this release
+  (#1325 by @ReillyBrogan).
+
+## v3.29.1 - 2023-08-26
+
+- Update to Go 1.21 (bump minimum version to 1.20) (#1302 by @pd93)
+- Fix a missing a line break on log when using `--watch` mode (#1285, #1297 by
+  @FilipSolich).
+- Fix `defer` on JSON Schema (#1288 by @calvinmclean and @andreynering).
+- Fix bug in usage of special variables like `{{.USER_WORKING_DIR}}` in
+  combination with `includes` (#1046, #1205, #1250, #1293, #1312, #1274 by
+  @andarto, #1309 by @andreynering).
+- Fix bug on `--status` flag. Running this flag should not have side-effects: it
+  should not update the checksum on `.task`, only report its status (#1305,
+  #1307 by @visciang, #1313 by @andreynering).
+
+## v3.28.0 - 2023-07-24
+
+- Added the ability to
+  [loop over commands and tasks](https://taskfile.dev/usage/#looping-over-values)
+  using `for` (#82, #1220 by @pd93).
+- Fixed variable propagation in multi-level includes (#778, #996, #1256 by
+  @hudclark).
+- Fixed a bug where the `--exit-code` code flag was not returning the correct
+  exit code when calling commands indirectly (#1266, #1270 by @pd93).
+- Fixed a `nil` panic when a dependency was commented out or left empty (#1263
+  by @neomantra).
+
+## v3.27.1 - 2023-06-30
+
+- Fix panic when a `.env` directory (not file) is present on current directory
+  (#1244, #1245 by @pd93).
+
+## v3.27.0 - 2023-06-29
+
+- Allow Taskfiles starting with lowercase characters (#947, #1221 by @pd93).
+  - e.g. `taskfile.yml`, `taskfile.yaml`, `taskfile.dist.yml` &
+    `taskfile.dist.yaml`
+- Bug fixes were made to the
+  [npm installation method](https://taskfile.dev/installation/#npm). (#1190, by
+  @sounisi5011).
+- Added the
+  [gentle force experiment](https://taskfile.dev/experiments/gentle-force) as a
+  draft (#1200, #1216 by @pd93).
+- Added an `--experiments` flag to allow you to see which experiments are
+  enabled (#1242 by @pd93).
+- Added ability to specify which variables are required in a task (#1203, #1204
+  by @benc-uk).
+
+## v3.26.0 - 2023-06-10
 
 - Only rewrite checksum files in `.task` if the checksum has changed (#1185,
   #1194 by @deviantintegral).
@@ -9,8 +387,12 @@
 - Deprecated `version: 2` schema. This will be removed in the next major release
   (#1197, #1198, #1199 by @pd93).
 - Added a new `prompt:` prop to set a warning prompt to be shown before running
-  a potential dangurous task (#100, #1163 by @MaxCheetham,
-  [Documentation](https://taskfile.dev/usage/#warning-prompts))
+  a potential dangerous task (#100, #1163 by @MaxCheetham,
+  [Documentation](https://taskfile.dev/usage/#warning-prompts)).
+- Added support for single command task syntax. With this change, it's now
+  possible to declare just `cmd:` in a task, avoiding the more complex
+  `cmds: []` when you have only a single command for that task (#1130, #1131 by
+  @timdp).
 
 ## v3.25.0 - 2023-05-22
 
@@ -20,7 +402,7 @@
   percentage (#1173 by @misitebao).
 - Starting on this release, official binaries for FreeBSD will be available to
   download (#1068 by @andreynering).
-- Fix some errors being unintendedly supressed (#1134 by @clintmod).
+- Fix some errors being unintendedly suppressed (#1134 by @clintmod).
 - Fix a nil pointer error when `version` is omitted from a Taskfile (#1148,
   #1149 by @pd93).
 - Fix duplicate error message when a task does not exists (#1141, #1144 by
@@ -93,8 +475,8 @@ it a go and let us know what you think via a
 - Fixed a bug where tasks were sometimes incorrectly marked as internal (#1007
   by @pd93).
 - Update to Go 1.20 (bump minimum version to 1.19) (#1010 by @pd93)
-- Added environment variable `FORCE_COLOR` support to force color output.
-  Usefull for environments without TTY (#1003 by @automation-stack)
+- Added environment variable `FORCE_COLOR` support to force color output. Useful
+  for environments without TTY (#1003 by @automation-stack)
 
 ## v3.20.0 - 2023-01-14
 
@@ -418,8 +800,8 @@ it a go and let us know what you think via a
 
 - On `v3`, all CLI variables will be considered global variables (#336, #341)
 - Add support to `.env` like files (#324, #356).
-- Add `label:` to task so you can override the task name in the logs
-  ([#321](https://github.com/go-task/task/issues/321]), #337).
+- Add `label:` to task so you can override the task name in the logs (#321,
+  #337).
 - Refactor how variables work on version 3 (#311).
 - Disallow `expansions` on v3 since it has no effect.
 - `Taskvars.yml` is not automatically included anymore.
@@ -449,7 +831,7 @@ it a go and let us know what you think via a
 
 - Fix error code for the `--help` flag (#300, #330).
 - Print version to stdout instead of stderr (#299, #329).
-- Supress `context` errors when using the `--watch` flag (#313, #317).
+- Suppress `context` errors when using the `--watch` flag (#313, #317).
 - Support templating on description (#276, #283).
 
 ## v2.8.0 - 2019-12-07
@@ -458,7 +840,7 @@ it a go and let us know what you think via a
   parallel (#266).
 - Fixed bug where calling the `task` CLI only informing global vars would not
   execute the `default` task.
-- Add hability to silent all tasks by adding `silent: true` a the root of the
+- Add ability to silent all tasks by adding `silent: true` a the root of the
   Taskfile.
 
 ## v2.7.1 - 2019-11-10
@@ -600,7 +982,7 @@ document, since it describes in depth what changed for this version.
 ## v1.4.3 - 2017-09-07
 
 - Allow assigning variables to tasks at run time via CLI (#33)
-- Added suport for multiline variables from sh (#64)
+- Added support for multiline variables from sh (#64)
 - Fixes env: remove square braces and evaluate shell (#62)
 - Watch: change watch library and few fixes and improvements
 - When use watching, cancel and restart long running process on file change (#59
@@ -660,7 +1042,7 @@ document, since it describes in depth what changed for this version.
 - More tests and Travis integration
 - Watch a task (experimental)
 - Possibility to call another task
-- Fix "=" not being reconized in variables/environment variables
+- Fix "=" not being recognized in variables/environment variables
 - Tasks can now have a description, and help will print them (#10)
 - Task dependencies now run concurrently
 - Support for a default task (#16)

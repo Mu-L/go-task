@@ -20,9 +20,7 @@ import (
 	"time"
 )
 
-var (
-	SLEEPIT, _ = filepath.Abs("./bin/sleepit")
-)
+var SLEEPIT, _ = filepath.Abs("./bin/sleepit")
 
 func TestSignalSentToProcessGroup(t *testing.T) {
 	task, err := getTaskPath()
@@ -147,7 +145,7 @@ func TestSignalSentToProcessGroup(t *testing.T) {
 			// where the negative PID means the corresponding process group. Note that
 			// this negative PID works only as long as the caller of the kill(2) system
 			// call has a different PID, which is the case for this test.
-			for i := 1; i <= tc.sendSigs; i++ {
+			for range tc.sendSigs - 1 {
 				if err := syscall.Kill(-sut.Process.Pid, syscall.SIGINT); err != nil {
 					t.Fatalf("sending INT signal to the process group: %v", err)
 				}
@@ -156,12 +154,8 @@ func TestSignalSentToProcessGroup(t *testing.T) {
 
 			err := sut.Wait()
 
-			// In case of a subprocess failing, Task always returns exit code 1, not the
-			// exit code returned by the subprocess. This is understandable, since Task
-			// supports parallel execution: if two parallel subprocess fail, each with a
-			// different exit code, which one should Task report? This would be a race.
 			var wantErr *exec.ExitError
-			const wantExitStatus = 1 // Task always returns exit code 1 in case of error
+			const wantExitStatus = 201
 			if errors.As(err, &wantErr) {
 				if wantErr.ExitCode() != wantExitStatus {
 					t.Errorf(

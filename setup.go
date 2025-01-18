@@ -2,42 +2,41 @@ package task
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/sajari/fuzzy"
 
-	compilerv2 "github.com/go-task/task/v3/internal/compiler/v2"
-	compilerv3 "github.com/go-task/task/v3/internal/compiler/v3"
+	"github.com/go-task/task/v3/errors"
+	"github.com/go-task/task/v3/internal/compiler"
 	"github.com/go-task/task/v3/internal/execext"
 	"github.com/go-task/task/v3/internal/filepathext"
 	"github.com/go-task/task/v3/internal/logger"
 	"github.com/go-task/task/v3/internal/output"
+	"github.com/go-task/task/v3/internal/version"
 	"github.com/go-task/task/v3/taskfile"
-	"github.com/go-task/task/v3/taskfile/read"
+	"github.com/go-task/task/v3/taskfile/ast"
 )
 
 func (e *Executor) Setup() error {
-	if err := e.setCurrentDir(); err != nil {
+	e.setupLogger()
+	node, err := e.getRootNode()
+	if err != nil {
 		return err
 	}
-
-	if err := e.readTaskfile(); err != nil {
-		return err
-	}
-
-	e.setupFuzzyModel()
-
 	if err := e.setupTempDir(); err != nil {
 		return err
 	}
+	if err := e.readTaskfile(node); err != nil {
+		return err
+	}
+	e.setupFuzzyModel()
 	e.setupStdFiles()
-	e.setupLogger()
 	if err := e.setupOutput(); err != nil {
 		return err
 	}
@@ -47,42 +46,41 @@ func (e *Executor) Setup() error {
 	if err := e.readDotEnvFiles(); err != nil {
 		return err
 	}
-
 	if err := e.doVersionChecks(); err != nil {
 		return err
 	}
 	e.setupDefaults()
 	e.setupConcurrencyState()
-
 	return nil
 }
 
-func (e *Executor) setCurrentDir() error {
-	if e.Dir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		e.Dir = wd
-	} else if !filepath.IsAbs(e.Dir) {
-		abs, err := filepath.Abs(e.Dir)
-		if err != nil {
-			return err
-		}
-		e.Dir = abs
+func (e *Executor) getRootNode() (taskfile.Node, error) {
+	node, err := taskfile.NewRootNode(e.Logger, e.Entrypoint, e.Dir, e.Insecure, e.Timeout)
+	if err != nil {
+		return nil, err
+	}
+	e.Dir = node.Dir()
+	return node, err
+}
+
+func (e *Executor) readTaskfile(node taskfile.Node) error {
+	reader := taskfile.NewReader(
+		node,
+		e.Insecure,
+		e.Download,
+		e.Offline,
+		e.Timeout,
+		e.TempDir.Remote,
+		e.Logger,
+	)
+	graph, err := reader.Read()
+	if err != nil {
+		return err
+	}
+	if e.Taskfile, err = graph.Merge(); err != nil {
+		return err
 	}
 	return nil
-}
-
-func (e *Executor) readTaskfile() error {
-	var err error
-	e.Taskfile, e.Dir, err = read.Taskfile(&read.ReaderNode{
-		Dir:        e.Dir,
-		Entrypoint: e.Entrypoint,
-		Parent:     nil,
-		Optional:   false,
-	})
-	return err
 }
 
 func (e *Executor) setupFuzzyModel() {
@@ -98,7 +96,7 @@ func (e *Executor) setupFuzzyModel() {
 		words = append(words, taskName)
 
 		for _, task := range e.Taskfile.Tasks.Values() {
-			words = append(words, task.Aliases...)
+			words = slices.Concat(words, task.Aliases)
 		}
 	}
 
@@ -107,12 +105,15 @@ func (e *Executor) setupFuzzyModel() {
 }
 
 func (e *Executor) setupTempDir() error {
-	if e.TempDir != "" {
+	if e.TempDir != (TempDir{}) {
 		return nil
 	}
 
 	if os.Getenv("TASK_TEMP_DIR") == "" {
-		e.TempDir = filepathext.SmartJoin(e.Dir, ".task")
+		e.TempDir = TempDir{
+			Remote:      filepathext.SmartJoin(e.Dir, ".task"),
+			Fingerprint: filepathext.SmartJoin(e.Dir, ".task"),
+		}
 	} else if filepath.IsAbs(os.Getenv("TASK_TEMP_DIR")) || strings.HasPrefix(os.Getenv("TASK_TEMP_DIR"), "~") {
 		tempDir, err := execext.Expand(os.Getenv("TASK_TEMP_DIR"))
 		if err != nil {
@@ -120,9 +121,28 @@ func (e *Executor) setupTempDir() error {
 		}
 		projectDir, _ := filepath.Abs(e.Dir)
 		projectName := filepath.Base(projectDir)
-		e.TempDir = filepathext.SmartJoin(tempDir, projectName)
+		e.TempDir = TempDir{
+			Remote:      tempDir,
+			Fingerprint: filepathext.SmartJoin(tempDir, projectName),
+		}
+
 	} else {
-		e.TempDir = filepathext.SmartJoin(e.Dir, os.Getenv("TASK_TEMP_DIR"))
+		e.TempDir = TempDir{
+			Remote:      filepathext.SmartJoin(e.Dir, os.Getenv("TASK_TEMP_DIR")),
+			Fingerprint: filepathext.SmartJoin(e.Dir, os.Getenv("TASK_TEMP_DIR")),
+		}
+	}
+
+	if os.Getenv("TASK_REMOTE_DIR") != "" {
+		if filepath.IsAbs(os.Getenv("TASK_REMOTE_DIR")) || strings.HasPrefix(os.Getenv("TASK_REMOTE_DIR"), "~") {
+			remoteTempDir, err := execext.Expand(os.Getenv("TASK_REMOTE_DIR"))
+			if err != nil {
+				return err
+			}
+			e.TempDir.Remote = remoteTempDir
+		} else {
+			e.TempDir.Remote = filepathext.SmartJoin(e.Dir, ".task")
+		}
 	}
 
 	return nil
@@ -142,10 +162,13 @@ func (e *Executor) setupStdFiles() {
 
 func (e *Executor) setupLogger() {
 	e.Logger = &logger.Logger{
-		Stdout:  e.Stdout,
-		Stderr:  e.Stderr,
-		Verbose: e.Verbose,
-		Color:   e.Color,
+		Stdin:      e.Stdin,
+		Stdout:     e.Stdout,
+		Stderr:     e.Stderr,
+		Verbose:    e.Verbose,
+		Color:      e.Color,
+		AssumeYes:  e.AssumeYes,
+		AssumeTerm: e.AssumeTerm,
 	}
 }
 
@@ -155,54 +178,42 @@ func (e *Executor) setupOutput() error {
 	}
 
 	var err error
-	e.Output, err = output.BuildFor(&e.OutputStyle)
+	e.Output, err = output.BuildFor(&e.OutputStyle, e.Logger)
 	return err
 }
 
 func (e *Executor) setupCompiler() error {
-	if e.Taskfile.Version.LessThan(taskfile.V3) {
+	if e.UserWorkingDir == "" {
 		var err error
-		e.taskvars, err = read.Taskvars(e.Dir)
+		e.UserWorkingDir, err = os.Getwd()
 		if err != nil {
 			return err
-		}
-
-		e.Compiler = &compilerv2.CompilerV2{
-			Dir:          e.Dir,
-			Taskvars:     e.taskvars,
-			TaskfileVars: e.Taskfile.Vars,
-			Expansions:   e.Taskfile.Expansions,
-			Logger:       e.Logger,
-		}
-	} else {
-		userWorkingDir, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		e.Compiler = &compilerv3.CompilerV3{
-			Dir:            e.Dir,
-			UserWorkingDir: userWorkingDir,
-			TaskfileEnv:    e.Taskfile.Env,
-			TaskfileVars:   e.Taskfile.Vars,
-			Logger:         e.Logger,
 		}
 	}
 
+	e.Compiler = &compiler.Compiler{
+		Dir:            e.Dir,
+		Entrypoint:     e.Entrypoint,
+		UserWorkingDir: e.UserWorkingDir,
+		TaskfileEnv:    e.Taskfile.Env,
+		TaskfileVars:   e.Taskfile.Vars,
+		Logger:         e.Logger,
+	}
 	return nil
 }
 
 func (e *Executor) readDotEnvFiles() error {
-	if e.Taskfile.Version.LessThan(taskfile.V3) {
+	if e.Taskfile.Version.LessThan(ast.V3) {
 		return nil
 	}
 
-	env, err := read.Dotenv(e.Compiler, e.Taskfile, e.Dir)
+	env, err := taskfile.Dotenv(e.Compiler, e.Taskfile, e.Dir)
 	if err != nil {
 		return err
 	}
 
-	err = env.Range(func(key string, value taskfile.Var) error {
-		if ok := e.Taskfile.Env.Exists(key); !ok {
+	err = env.Range(func(key string, value ast.Var) error {
+		if _, ok := e.Taskfile.Env.Get(key); !ok {
 			e.Taskfile.Env.Set(key, value)
 		}
 		return nil
@@ -211,19 +222,9 @@ func (e *Executor) readDotEnvFiles() error {
 }
 
 func (e *Executor) setupDefaults() {
-	// Color available only on v3
-	if e.Taskfile.Version.LessThan(taskfile.V3) {
-		e.Logger.Color = false
-	}
-
 	if e.Taskfile.Method == "" {
-		if e.Taskfile.Version.Compare(taskfile.V3) >= 0 {
-			e.Taskfile.Method = "checksum"
-		} else {
-			e.Taskfile.Method = "timestamp"
-		}
+		e.Taskfile.Method = "checksum"
 	}
-
 	if e.Taskfile.Run == "" {
 		e.Taskfile.Run = "always"
 	}
@@ -245,87 +246,35 @@ func (e *Executor) setupConcurrencyState() {
 }
 
 func (e *Executor) doVersionChecks() error {
+	if !e.EnableVersionCheck {
+		return nil
+	}
 	// Copy the version to avoid modifying the original
-	v := &semver.Version{}
-	*v = *e.Taskfile.Version
+	schemaVersion := &semver.Version{}
+	*schemaVersion = *e.Taskfile.Version
 
-	if v.LessThan(taskfile.V2) {
-		return fmt.Errorf(`task: version 1 schemas are no longer supported`)
-	}
-
-	if v.LessThan(taskfile.V3) {
-		e.Logger.Errf(logger.Yellow, "task: version 2 schemas are deprecated and will be removed in a future release\nSee https://github.com/go-task/task/issues/1197 for more details\n")
-	}
-
-	// consider as equal to the greater version if round
-	if v.Equal(taskfile.V2) {
-		v = semver.MustParse("2.6")
-	}
-	if v.Equal(taskfile.V3) {
-		v = semver.MustParse("3.8")
-	}
-
-	if v.GreaterThan(semver.MustParse("3.8")) {
-		return fmt.Errorf(`task: Taskfile versions greater than v3.8 not implemented in the version of Task`)
-	}
-
-	if v.LessThan(semver.MustParse("2.1")) && !e.Taskfile.Output.IsSet() {
-		return fmt.Errorf(`task: Taskfile option "output" is only available starting on Taskfile version v2.1`)
-	}
-	if v.LessThan(semver.MustParse("2.2")) && e.Taskfile.Includes.Len() > 0 {
-		return fmt.Errorf(`task: Including Taskfiles is only available starting on Taskfile version v2.2`)
-	}
-	if v.Compare(taskfile.V3) >= 0 && e.Taskfile.Expansions > 2 {
-		return fmt.Errorf(`task: The "expansions" setting is not available anymore on v3.0`)
-	}
-	if v.LessThan(semver.MustParse("3.8")) && e.Taskfile.Output.Group.IsSet() {
-		return fmt.Errorf(`task: Taskfile option "output.group" is only available starting on Taskfile version v3.8`)
-	}
-
-	if v.Compare(semver.MustParse("2.1")) <= 0 {
-		err := errors.New(`task: Taskfile option "ignore_error" is only available starting on Taskfile version v2.1`)
-
-		for _, task := range e.Taskfile.Tasks.Values() {
-			if task.IgnoreError {
-				return err
-			}
-			for _, cmd := range task.Cmds {
-				if cmd.IgnoreError {
-					return err
-				}
-			}
+	// Error if the Taskfile uses a schema version below v3
+	if schemaVersion.LessThan(ast.V3) {
+		return &errors.TaskfileVersionCheckError{
+			URI:           e.Taskfile.Location,
+			SchemaVersion: schemaVersion,
+			Message:       `no longer supported. Please use v3 or above`,
 		}
 	}
 
-	if v.LessThan(semver.MustParse("2.6")) {
-		for _, task := range e.Taskfile.Tasks.Values() {
-			if len(task.Preconditions) > 0 {
-				return errors.New(`task: Task option "preconditions" is only available starting on Taskfile version v2.6`)
-			}
-		}
+	// Get the current version of Task
+	// If we can't parse the version (e.g. when its "devel"), then ignore the current version checks
+	currentVersion, err := semver.NewVersion(version.GetVersion())
+	if err != nil {
+		return nil
 	}
 
-	if v.LessThan(taskfile.V3) {
-		err := e.Taskfile.Includes.Range(func(_ string, taskfile taskfile.IncludedTaskfile) error {
-			if taskfile.AdvancedImport {
-				return errors.New(`task: Import with additional parameters is only available starting on Taskfile version v3`)
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	if v.LessThan(semver.MustParse("3.7")) {
-		if e.Taskfile.Run != "" {
-			return errors.New(`task: Setting the "run" type is only available starting on Taskfile version v3.7`)
-		}
-
-		for _, task := range e.Taskfile.Tasks.Values() {
-			if task.Run != "" {
-				return errors.New(`task: Setting the "run" type is only available starting on Taskfile version v3.7`)
-			}
+	// Error if the Taskfile uses a schema version above the current version of Task
+	if schemaVersion.GreaterThan(currentVersion) {
+		return &errors.TaskfileVersionCheckError{
+			URI:           e.Taskfile.Location,
+			SchemaVersion: schemaVersion,
+			Message:       fmt.Sprintf(`is greater than the current version of Task (%s)`, currentVersion.String()),
 		}
 	}
 

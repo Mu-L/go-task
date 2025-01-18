@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/go-task/task/v3/taskfile"
+	"github.com/go-task/task/v3/taskfile/ast"
 )
 
 // TimestampChecker checks if any source change compared with the generated files,
@@ -23,16 +23,16 @@ func NewTimestampChecker(tempDir string, dry bool) *TimestampChecker {
 }
 
 // IsUpToDate implements the Checker interface
-func (checker *TimestampChecker) IsUpToDate(t *taskfile.Task) (bool, error) {
+func (checker *TimestampChecker) IsUpToDate(t *ast.Task) (bool, error) {
 	if len(t.Sources) == 0 {
 		return false, nil
 	}
 
-	sources, err := globs(t.Dir, t.Sources)
+	sources, err := Globs(t.Dir, t.Sources)
 	if err != nil {
 		return false, nil
 	}
-	generates, err := globs(t.Dir, t.Generates)
+	generates, err := Globs(t.Dir, t.Generates)
 	if err != nil {
 		return false, nil
 	}
@@ -89,8 +89,8 @@ func (checker *TimestampChecker) Kind() string {
 }
 
 // Value implements the Checker Interface
-func (checker *TimestampChecker) Value(t *taskfile.Task) (any, error) {
-	sources, err := globs(t.Dir, t.Sources)
+func (checker *TimestampChecker) Value(t *ast.Task) (any, error) {
+	sources, err := Globs(t.Dir, t.Sources)
 	if err != nil {
 		return time.Now(), err
 	}
@@ -142,10 +142,10 @@ func anyFileNewerThan(files []string, givenTime time.Time) (bool, error) {
 }
 
 // OnError implements the Checker interface
-func (*TimestampChecker) OnError(t *taskfile.Task) error {
+func (*TimestampChecker) OnError(t *ast.Task) error {
 	return nil
 }
 
-func (checker *TimestampChecker) timestampFilePath(t *taskfile.Task) string {
+func (checker *TimestampChecker) timestampFilePath(t *ast.Task) string {
 	return filepath.Join(checker.tempDir, "timestamp", normalizeFilename(t.Task))
 }

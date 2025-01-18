@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,24 +9,33 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/otiai10/copy"
+	"github.com/spf13/pflag"
+
+	"github.com/go-task/task/v3/errors"
 )
 
 const (
 	changelogSource = "CHANGELOG.md"
-	changelogTarget = "docs/docs/changelog.md"
+	changelogTarget = "website/docs/changelog.mdx"
+	docsSource      = "website/docs"
+	docsTarget      = "website/versioned_docs/version-latest"
 )
-
-const changelogTemplate = `---
-slug: /changelog/
-sidebar_position: 9
----`
 
 var (
 	changelogReleaseRegex = regexp.MustCompile(`## Unreleased`)
-	changelogUserRegex    = regexp.MustCompile(`@(\w+)`)
-	changelogIssueRegex   = regexp.MustCompile(`#(\d+)`)
 	versionRegex          = regexp.MustCompile(`(?m)^  "version": "\d+\.\d+\.\d+",$`)
 )
+
+// Flags
+var (
+	versionFlag bool
+)
+
+func init() {
+	pflag.BoolVarP(&versionFlag, "version", "v", false, "resolved version number")
+	pflag.Parse()
+}
 
 func main() {
 	if err := release(); err != nil {
@@ -37,7 +45,7 @@ func main() {
 }
 
 func release() error {
-	if len(os.Args) != 2 {
+	if len(pflag.Args()) != 1 {
 		return errors.New("error: expected version number")
 	}
 
@@ -46,11 +54,14 @@ func release() error {
 		return err
 	}
 
-	if err := bumpVersion(version, os.Args[1]); err != nil {
+	if err := bumpVersion(version, pflag.Arg(0)); err != nil {
 		return err
 	}
 
-	fmt.Println(version)
+	if versionFlag {
+		fmt.Println(version)
+		return nil
+	}
 
 	if err := changelog(version); err != nil {
 		return err
@@ -61,6 +72,10 @@ func release() error {
 	}
 
 	if err := setJSONVersion("package-lock.json", version); err != nil {
+		return err
+	}
+
+	if err := docs(); err != nil {
 		return err
 	}
 
@@ -92,8 +107,22 @@ func bumpVersion(version *semver.Version, verb string) error {
 }
 
 func changelog(version *semver.Version) error {
+	// Open changelog target file
+	b, err := os.ReadFile(changelogTarget)
+	if err != nil {
+		return err
+	}
+
+	// Get the current frontmatter
+	currentChangelog := string(b)
+	sections := strings.SplitN(currentChangelog, "---", 3)
+	if len(sections) != 3 {
+		return errors.New("error: invalid frontmatter")
+	}
+	frontmatter := strings.TrimSpace(sections[1])
+
 	// Open changelog source file
-	b, err := os.ReadFile(changelogSource)
+	b, err = os.ReadFile(changelogSource)
 	if err != nil {
 		return err
 	}
@@ -109,11 +138,7 @@ func changelog(version *semver.Version) error {
 	}
 
 	// Add the frontmatter to the changelog
-	changelog = fmt.Sprintf("%s\n\n%s", changelogTemplate, changelog)
-
-	// Replace @user and #issue with full links
-	changelog = changelogUserRegex.ReplaceAllString(changelog, "[@$1](https://github.com/$1)")
-	changelog = changelogIssueRegex.ReplaceAllString(changelog, "[#$1](https://github.com/go-task/task/issues/$1)")
+	changelog = fmt.Sprintf("---\n%s\n---\n\n%s", frontmatter, changelog)
 
 	// Write the changelog to the target file
 	return os.WriteFile(changelogTarget, []byte(changelog), 0o644)
@@ -131,4 +156,14 @@ func setJSONVersion(fileName string, version *semver.Version) error {
 
 	// Write the JSON file
 	return os.WriteFile(fileName, []byte(new), 0o644)
+}
+
+func docs() error {
+	if err := os.RemoveAll(docsTarget); err != nil {
+		return err
+	}
+	if err := copy.Copy(docsSource, docsTarget); err != nil {
+		return err
+	}
+	return nil
 }

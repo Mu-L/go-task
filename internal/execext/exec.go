@@ -2,7 +2,6 @@ package execext
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/shell"
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/go-task/task/v3/errors"
 )
 
 // RunCommandOptions is the options for the RunCommand func
@@ -59,7 +60,7 @@ func RunCommand(ctx context.Context, opts *RunCommandOptions) error {
 	r, err := interp.New(
 		interp.Params(params...),
 		interp.Env(expand.ListEnviron(environ...)),
-		interp.ExecHandler(interp.DefaultExecHandler(15*time.Second)),
+		interp.ExecHandlers(execHandler),
 		interp.OpenHandler(openHandler),
 		interp.StdIO(opts.Stdin, opts.Stdout, opts.Stderr),
 		dirOption(opts.Dir),
@@ -90,19 +91,14 @@ func RunCommand(ctx context.Context, opts *RunCommandOptions) error {
 	return r.Run(ctx, p)
 }
 
-// IsExitError returns true the given error is an exis status error
-func IsExitError(err error) bool {
-	if _, ok := interp.IsExitStatus(err); ok {
-		return true
-	}
-	return false
-}
-
 // Expand is a helper to mvdan.cc/shell.Fields that returns the first field
 // if available.
 func Expand(s string) (string, error) {
 	s = filepath.ToSlash(s)
 	s = strings.ReplaceAll(s, " ", `\ `)
+	s = strings.ReplaceAll(s, "&", `\&`)
+	s = strings.ReplaceAll(s, "(", `\(`)
+	s = strings.ReplaceAll(s, ")", `\)`)
 	fields, err := shell.Fields(s, nil)
 	if err != nil {
 		return "", err
@@ -111,6 +107,10 @@ func Expand(s string) (string, error) {
 		return fields[0], nil
 	}
 	return "", nil
+}
+
+func execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+	return interp.DefaultExecHandler(15 * time.Second)
 }
 
 func openHandler(ctx context.Context, path string, flag int, perm os.FileMode) (io.ReadWriteCloser, error) {

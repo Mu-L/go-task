@@ -5,18 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/Ladicle/tabwriter"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/go-task/task/v3/internal/editors"
 	"github.com/go-task/task/v3/internal/fingerprint"
 	"github.com/go-task/task/v3/internal/logger"
 	"github.com/go-task/task/v3/internal/sort"
-	"github.com/go-task/task/v3/taskfile"
+	"github.com/go-task/task/v3/taskfile/ast"
 )
 
 // ListOptions collects list-related options
@@ -24,14 +23,16 @@ type ListOptions struct {
 	ListOnlyTasksWithDescriptions bool
 	ListAllTasks                  bool
 	FormatTaskListAsJSON          bool
+	NoStatus                      bool
 }
 
 // NewListOptions creates a new ListOptions instance
-func NewListOptions(list, listAll, listAsJson bool) ListOptions {
+func NewListOptions(list, listAll, listAsJson, noStatus bool) ListOptions {
 	return ListOptions{
 		ListOnlyTasksWithDescriptions: list,
 		ListAllTasks:                  listAll,
 		FormatTaskListAsJSON:          listAsJson,
+		NoStatus:                      noStatus,
 	}
 }
 
@@ -48,11 +49,14 @@ func (o ListOptions) Validate() error {
 	if o.FormatTaskListAsJSON && !o.ShouldListTasks() {
 		return fmt.Errorf("task: --json only applies to --list or --list-all")
 	}
+	if o.NoStatus && !o.FormatTaskListAsJSON {
+		return fmt.Errorf("task: --no-status only applies to --json with --list or --list-all")
+	}
 	return nil
 }
 
 // Filters returns the slice of FilterFunc which filters a list
-// of taskfile.Task according to the given ListOptions
+// of ast.Task according to the given ListOptions
 func (o ListOptions) Filters() []FilterFunc {
 	filters := []FilterFunc{FilterOutInternal}
 
@@ -73,7 +77,7 @@ func (e *Executor) ListTasks(o ListOptions) (bool, error) {
 		return false, err
 	}
 	if o.FormatTaskListAsJSON {
-		output, err := e.ToEditorOutput(tasks)
+		output, err := e.ToEditorOutput(tasks, o.NoStatus)
 		if err != nil {
 			return false, err
 		}
@@ -101,7 +105,8 @@ func (e *Executor) ListTasks(o ListOptions) (bool, error) {
 	for _, task := range tasks {
 		e.Logger.FOutf(w, logger.Yellow, "* ")
 		e.Logger.FOutf(w, logger.Green, task.Task)
-		e.Logger.FOutf(w, logger.Default, ": \t%s", task.Desc)
+		desc := strings.ReplaceAll(task.Desc, "\n", " ")
+		e.Logger.FOutf(w, logger.Default, ": \t%s", desc)
 		if len(task.Aliases) > 0 {
 			e.Logger.FOutf(w, logger.Cyan, "\t(aliases: %s)", strings.Join(task.Aliases, ", "))
 		}
@@ -116,14 +121,7 @@ func (e *Executor) ListTasks(o ListOptions) (bool, error) {
 // ListTaskNames prints only the task names in a Taskfile.
 // Only tasks with a non-empty description are printed if allTasks is false.
 // Otherwise, all task names are printed.
-func (e *Executor) ListTaskNames(allTasks bool) {
-	// if called from cmd/task.go, e.Taskfile has not yet been parsed
-	if e.Taskfile == nil {
-		if err := e.readTaskfile(); err != nil {
-			log.Fatal(err)
-			return
-		}
-	}
+func (e *Executor) ListTaskNames(allTasks bool) error {
 	// use stdout if no output defined
 	var w io.Writer = os.Stdout
 	if e.Stdout != nil {
@@ -152,43 +150,55 @@ func (e *Executor) ListTaskNames(allTasks bool) {
 	for _, t := range taskNames {
 		fmt.Fprintln(w, t)
 	}
+	return nil
 }
 
-func (e *Executor) ToEditorOutput(tasks []*taskfile.Task) (*editors.Taskfile, error) {
+func (e *Executor) ToEditorOutput(tasks []*ast.Task, noStatus bool) (*editors.Taskfile, error) {
 	o := &editors.Taskfile{
 		Tasks:    make([]editors.Task, len(tasks)),
 		Location: e.Taskfile.Location,
 	}
 	var g errgroup.Group
 	for i := range tasks {
-		task := tasks[i]
-		j := i
+		aliases := []string{}
+		if len(tasks[i].Aliases) > 0 {
+			aliases = tasks[i].Aliases
+		}
 		g.Go(func() error {
+			o.Tasks[i] = editors.Task{
+				Name:     tasks[i].Name(),
+				Desc:     tasks[i].Desc,
+				Summary:  tasks[i].Summary,
+				Aliases:  aliases,
+				UpToDate: false,
+				Location: &editors.Location{
+					Line:     tasks[i].Location.Line,
+					Column:   tasks[i].Location.Column,
+					Taskfile: tasks[i].Location.Taskfile,
+				},
+			}
+
+			if noStatus {
+				return nil
+			}
+
 			// Get the fingerprinting method to use
 			method := e.Taskfile.Method
-			if task.Method != "" {
-				method = task.Method
+			if tasks[i].Method != "" {
+				method = tasks[i].Method
 			}
-			upToDate, err := fingerprint.IsTaskUpToDate(context.Background(), task,
+			upToDate, err := fingerprint.IsTaskUpToDate(context.Background(), tasks[i],
 				fingerprint.WithMethod(method),
-				fingerprint.WithTempDir(e.TempDir),
+				fingerprint.WithTempDir(e.TempDir.Fingerprint),
 				fingerprint.WithDry(e.Dry),
 				fingerprint.WithLogger(e.Logger),
 			)
 			if err != nil {
 				return err
 			}
-			o.Tasks[j] = editors.Task{
-				Name:     task.Name(),
-				Desc:     task.Desc,
-				Summary:  task.Summary,
-				UpToDate: upToDate,
-				Location: &editors.Location{
-					Line:     task.Location.Line,
-					Column:   task.Location.Column,
-					Taskfile: task.Location.Taskfile,
-				},
-			}
+
+			o.Tasks[i].UpToDate = upToDate
+
 			return nil
 		})
 	}

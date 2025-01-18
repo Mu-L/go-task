@@ -1,28 +1,36 @@
-build:
-  binary: task
-  main: ./cmd/task
-  goos:
-    - windows
-    - darwin
-    - linux
-    - freebsd
-  goarch:
-    - '386'
-    - amd64
-    - arm
-    - arm64
-  goarm:
-    - '6'
-  ignore:
-    - goos: darwin
-      goarch: '386'
-  env:
-    - CGO_ENABLED=0
-  mod_timestamp: '{{ .CommitTimestamp }}'
-  flags:
-    - -trimpath
-  ldflags:
-    - -s -w # Don't set main.version.
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+builds:
+  - binary: task
+    main: ./cmd/task
+    goos:
+      - windows
+      - darwin
+      - linux
+      - freebsd
+    goarch:
+      - '386'
+      - amd64
+      - arm
+      - arm64
+      - riscv64
+    goarm:
+      - '6'
+    ignore:
+      - goos: darwin
+        goarch: '386'
+      - goos: darwin
+        goarch: riscv64
+      - goos: windows
+        goarch: riscv64
+    env:
+      - CGO_ENABLED=0
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w # Don't set main.version.
 
 gomod:
   proxy: true
@@ -41,7 +49,7 @@ release:
   draft: true
 
 snapshot:
-  name_template: "{{.Tag}}"
+  version_template: "{{.Version}}"
 
 checksum:
   name_template: "task_checksums.txt"
@@ -49,7 +57,7 @@ checksum:
 nfpms:
   - vendor: Task
     homepage: https://taskfile.dev
-    maintainer: Andrey Nering <andrey@nering.com.br>
+    maintainer: The Task authors <task@taskfile.dev>
     description: Simple task runner written in Go
     license: MIT
     conflicts:
@@ -71,8 +79,8 @@ brews:
     description: Task runner / simpler Make alternative written in Go
     license: MIT
     homepage: https://taskfile.dev
-    folder: Formula
-    tap:
+    directory: Formula
+    repository:
       owner: go-task
       name: homebrew-tap
     test:
@@ -85,3 +93,41 @@ brews:
     commit_author:
       name: task-bot
       email: 106601941+task-bot@users.noreply.github.com
+
+winget:
+  - name: Task
+    publisher: Task
+    short_description: A task runner / simpler Make alternative written in Go
+    description: Task is a task runner / build tool that aims to be simpler and easier to use than, for example, GNU Make.
+    license: MIT
+    homepage: https://taskfile.dev/
+    publisher_url: https://taskfile.dev/
+    publisher_support_url: https://github.com/go-task/task/issues
+    package_identifier: Task.Task
+    commit_author:
+      name: task-bot
+      email: 106601941+task-bot@users.noreply.github.com
+    commit_msg_template: "chore: bump {{.PackageIdentifier}} to {{.Tag}}"
+    release_notes_url: https://github.com/go-task/task/releases/tag/{{.Tag}}
+    tags:
+      - build
+      - build-tool
+      - devops
+      - go
+      - make
+      - makefile
+      - runner
+      - task
+      - task-runner
+      - taskfile
+      - tool
+    skip_upload: true
+    repository:
+      owner: microsoft
+      name: winget-pkgs
+      pull_request:
+        enabled: true
+        base:
+          owner: go-task
+          name: winget-pkgs
+          branch: "bump-task-to-{{.Tag}}"

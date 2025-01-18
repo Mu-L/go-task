@@ -4,19 +4,22 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"text/template"
 
-	sprig "github.com/go-task/slim-sprig"
+	"github.com/davecgh/go-spew/spew"
 	"mvdan.cc/sh/v3/shell"
 	"mvdan.cc/sh/v3/syntax"
+
+	sprig "github.com/go-task/slim-sprig/v3"
+	"github.com/go-task/template"
 )
 
 var templateFuncs template.FuncMap
 
 func init() {
 	taskFuncs := template.FuncMap{
-		"OS":   func() string { return runtime.GOOS },
-		"ARCH": func() string { return runtime.GOARCH },
+		"OS":     func() string { return runtime.GOOS },
+		"ARCH":   func() string { return runtime.GOARCH },
+		"numCPU": func() int { return runtime.NumCPU() },
 		"catLines": func(s string) string {
 			s = strings.ReplaceAll(s, "\r\n", " ")
 			return strings.ReplaceAll(s, "\n", " ")
@@ -45,13 +48,42 @@ func init() {
 		},
 		// IsSH is deprecated.
 		"IsSH": func() bool { return true },
+		"joinPath": func(elem ...string) string {
+			return filepath.Join(elem...)
+		},
+		"relPath": func(basePath, targetPath string) (string, error) {
+			return filepath.Rel(basePath, targetPath)
+		},
+		"merge": func(base map[string]any, v ...map[string]any) map[string]any {
+			cap := len(v)
+			for _, m := range v {
+				cap += len(m)
+			}
+			result := make(map[string]any, cap)
+			for k, v := range base {
+				result[k] = v
+			}
+			for _, m := range v {
+				for k, v := range m {
+					result[k] = v
+				}
+			}
+			return result
+		},
+		"spew": func(v any) string {
+			return spew.Sdump(v)
+		},
 	}
+
+	// aliases
+	taskFuncs["q"] = taskFuncs["shellQuote"]
+
 	// Deprecated aliases for renamed functions.
 	taskFuncs["FromSlash"] = taskFuncs["fromSlash"]
 	taskFuncs["ToSlash"] = taskFuncs["toSlash"]
 	taskFuncs["ExeExt"] = taskFuncs["exeExt"]
 
-	templateFuncs = sprig.TxtFuncMap()
+	templateFuncs = template.FuncMap(sprig.TxtFuncMap())
 	for k, v := range taskFuncs {
 		templateFuncs[k] = v
 	}
